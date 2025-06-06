@@ -4,6 +4,7 @@ use console::style;
 use dialoguer::{Input, Select, theme::ColorfulTheme};
 use indicatif::ProgressBar;
 use std::process::Command;
+use std::path::Path;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -31,6 +32,38 @@ enum PackageManager {
     Yarn,
     Pnpm,
     Bun,
+}
+
+#[derive(Debug)]
+enum ProjectStructure {
+    AppDir,
+    SrcDir,
+}
+
+impl ProjectStructure {
+    fn detect() -> Result<Self> {
+        if Path::new("app").exists() {
+            Ok(ProjectStructure::AppDir)
+        } else if Path::new("src").exists() {
+            Ok(ProjectStructure::SrcDir)
+        } else {
+            anyhow::bail!("Could not detect project structure. Neither 'app' nor 'src' directory found.")
+        }
+    }
+
+    fn get_globals_css_path(&self) -> &'static str {
+        match self {
+            ProjectStructure::AppDir => "app/globals.css",
+            ProjectStructure::SrcDir => "src/app/globals.css",
+        }
+    }
+
+    fn get_lib_path(&self) -> &'static str {
+        match self {
+            ProjectStructure::AppDir => "lib",
+            ProjectStructure::SrcDir => "src/lib",
+        }
+    }
 }
 
 impl PackageManager {
@@ -177,11 +210,21 @@ async fn add_feature(feature: Option<String>) -> Result<()> {
 
 async fn add_shadcn() -> Result<()> {
     let package_manager = PackageManager::detect()?;
+    let project_structure = ProjectStructure::detect()?;
+
     println!(
         "{}",
         style(format!(
             "Using package manager: {}",
             format!("{:?}", package_manager).to_lowercase()
+        ))
+        .yellow()
+    );
+    println!(
+        "{}",
+        style(format!(
+            "Project structure: {}",
+            format!("{:?}", project_structure).to_lowercase()
         ))
         .yellow()
     );
@@ -238,8 +281,12 @@ import { twMerge } from "tailwind-merge"
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }"#;
-    std::fs::create_dir_all("lib").context("Failed to create lib directory")?;
-    std::fs::write("lib/utils.ts", utils_ts).context("Failed to create utils.ts")?;
+
+    let lib_path = project_structure.get_lib_path();
+    std::fs::create_dir_all(lib_path).context("Failed to create lib directory")?;
+    std::fs::write(format!("{}/utils.ts", lib_path), utils_ts)
+        .context("Failed to create utils.ts")?;
+
     // Update globals.css
     let globals_css = r#"@import "tailwindcss";
 @import "tw-animate-css";
@@ -364,7 +411,10 @@ export function cn(...inputs: ClassValue[]) {
     @apply bg-background text-foreground;
   }
 }"#;
-    std::fs::write("app/globals.css", globals_css).context("Failed to update globals.css")?;
+
+    let globals_css_path = project_structure.get_globals_css_path();
+    std::fs::write(globals_css_path, globals_css)
+        .context("Failed to update globals.css")?;
 
     pb.finish_with_message("shadcn/ui installed successfully!");
     println!("\n{}", style("Next steps:").green());

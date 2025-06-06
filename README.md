@@ -4,7 +4,14 @@ A CLI tool for scaffolding and enhancing Next.js projects with modern features.
 
 ## Installation
 
+### From Source
 ```bash
+# Clone the repository
+git clone https://github.com/happybear-21/nstack.git
+cd nstack
+
+# Build and install
+cargo build --release
 cargo install --path .
 ```
 
@@ -26,9 +33,6 @@ nstack add
 
 # Or specify a feature directly
 nstack add --feature shadcn
-nstack add --feature supabase
-nstack add --feature auth
-nstack add --feature prisma
 ```
 
 ### List available features
@@ -40,9 +44,6 @@ nstack list
 ## Available Features
 
 - **shadcn**: Adds shadcn/ui components and configuration
-- **supabase**: Sets up Supabase client and configuration
-- **auth**: Configures authentication with Supabase
-- **prisma**: Sets up Prisma ORM with initial configuration
 
 ## Development
 
@@ -54,4 +55,12 @@ cargo build
 cargo run -- create
 cargo run -- add
 cargo run -- list
-``` 
+```
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 

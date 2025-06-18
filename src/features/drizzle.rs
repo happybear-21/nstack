@@ -10,6 +10,8 @@ use crate::package_manager::PackageManager;
 pub enum DatabaseProvider {
     PostgreSQL,
     Neon,
+    VercelPostgres,
+    Supabase,
 }
 
 impl DatabaseProvider {
@@ -17,6 +19,8 @@ impl DatabaseProvider {
         match self {
             DatabaseProvider::PostgreSQL => "PostgreSQL",
             DatabaseProvider::Neon => "Neon",
+            DatabaseProvider::VercelPostgres => "Vercel Postgres",
+            DatabaseProvider::Supabase => "Supabase",
         }
     }
 
@@ -24,6 +28,8 @@ impl DatabaseProvider {
         match self {
             DatabaseProvider::PostgreSQL => vec!["drizzle-orm", "pg", "dotenv"],
             DatabaseProvider::Neon => vec!["drizzle-orm", "@neondatabase/serverless", "dotenv"],
+            DatabaseProvider::VercelPostgres => vec!["drizzle-orm", "@vercel/postgres", "dotenv"],
+            DatabaseProvider::Supabase => vec!["drizzle-orm", "postgres", "dotenv"],
         }
     }
 
@@ -31,6 +37,8 @@ impl DatabaseProvider {
         match self {
             DatabaseProvider::PostgreSQL => vec!["drizzle-kit", "tsx", "@types/pg"],
             DatabaseProvider::Neon => vec!["drizzle-kit", "tsx"],
+            DatabaseProvider::VercelPostgres => vec!["drizzle-kit", "tsx"],
+            DatabaseProvider::Supabase => vec!["drizzle-kit", "tsx"],
         }
     }
 
@@ -53,6 +61,19 @@ import * as schema from './schema';
 
 const sql = neon(process.env.DATABASE_URL!);
 export const db = drizzle(sql, { schema });"#,
+            DatabaseProvider::VercelPostgres => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/vercel-postgres';
+import * as schema from './schema';
+
+const db = drizzle({ schema });"#,
+            DatabaseProvider::Supabase => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import * as schema from './schema';
+
+// Disable prefetch as it is not supported for "Transaction" pool mode
+const client = postgres(process.env.DATABASE_URL!, { prepare: false });
+export const db = drizzle(client, { schema });"#,
         }
     }
 
@@ -66,6 +87,14 @@ DATABASE_URL="postgresql://username:password@localhost:5432/your_database"
 DATABASE_URL="postgresql://username:password@your-neon-db.neon.tech/your_database"
 
 # Add your other environment variables here"#,
+            DatabaseProvider::VercelPostgres => r#"# Database
+POSTGRES_URL="postgresql://username:password@your-vercel-postgres.vercel-storage.com/your_database"
+
+# Add your other environment variables here"#,
+            DatabaseProvider::Supabase => r#"# Database
+DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supabase.co:5432/postgres"
+
+# Add your other environment variables here"#,
         }
     }
 
@@ -73,6 +102,17 @@ DATABASE_URL="postgresql://username:password@your-neon-db.neon.tech/your_databas
         match self {
             DatabaseProvider::PostgreSQL => "Traditional PostgreSQL database (local or hosted)",
             DatabaseProvider::Neon => "Neon serverless PostgreSQL database",
+            DatabaseProvider::VercelPostgres => "Vercel Postgres database (serverless)",
+            DatabaseProvider::Supabase => "Supabase PostgreSQL database (open source Firebase alternative)",
+        }
+    }
+
+    fn get_env_variable_name(&self) -> &'static str {
+        match self {
+            DatabaseProvider::PostgreSQL => "DATABASE_URL",
+            DatabaseProvider::Neon => "DATABASE_URL",
+            DatabaseProvider::VercelPostgres => "POSTGRES_URL",
+            DatabaseProvider::Supabase => "DATABASE_URL",
         }
     }
 }
@@ -99,7 +139,7 @@ pub async fn add_drizzle() -> Result<()> {
     );
 
     // Interactive database provider selection
-    let providers = vec![DatabaseProvider::PostgreSQL, DatabaseProvider::Neon];
+    let providers = vec![DatabaseProvider::PostgreSQL, DatabaseProvider::Neon, DatabaseProvider::VercelPostgres, DatabaseProvider::Supabase];
     let provider_names: Vec<String> = providers.iter()
         .map(|p| format!("{} - {}", p.as_str(), p.get_description()))
         .collect();
@@ -144,18 +184,18 @@ pub async fn add_drizzle() -> Result<()> {
 
     pb.set_message("Setting up Drizzle configuration...");
 
-    // Create drizzle.config.ts (same for all providers)
-    let drizzle_config = r#"import 'dotenv/config';
-import { defineConfig } from 'drizzle-kit';
+    // Create drizzle.config.ts with provider-specific environment variable
+    let drizzle_config = format!(r#"import 'dotenv/config';
+import {{ defineConfig }} from 'drizzle-kit';
 
-export default defineConfig({
+export default defineConfig({{
   out: './drizzle',
   schema: './src/db/schema.ts',
   dialect: 'postgresql',
-  dbCredentials: {
-    url: process.env.DATABASE_URL!,
-  },
-});"#;
+  dbCredentials: {{
+    url: process.env.{}!,
+  }},
+}});"#, selected_provider.get_env_variable_name());
 
     std::fs::write("drizzle.config.ts", drizzle_config)
         .context("Failed to create drizzle.config.ts")?;
@@ -238,11 +278,12 @@ export type NewPost = typeof postsTable.$inferInsert;"#;
         std::fs::write(env_path, env_content)
             .context("Failed to create .env")?;
     } else {
-        // Append to existing .env if DATABASE_URL doesn't exist
+        // Append to existing .env if the provider's env variable doesn't exist
         let existing_content = std::fs::read_to_string(env_path)
             .context("Failed to read .env")?;
         
-        if !existing_content.contains("DATABASE_URL") {
+        let env_var_name = selected_provider.get_env_variable_name();
+        if !existing_content.contains(env_var_name) {
             let updated_content = format!("{}\n\n{}", existing_content, env_content);
             std::fs::write(env_path, updated_content)
                 .context("Failed to update .env")?;
@@ -384,6 +425,73 @@ async function main() {
 }
 
 main();"#,
+        DatabaseProvider::VercelPostgres => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/vercel-postgres';
+import { eq } from 'drizzle-orm';
+import { usersTable } from './db/schema';
+
+async function main() {
+  const db = drizzle();
+
+  const user: typeof usersTable.$inferInsert = {
+    name: 'John Doe',
+    email: 'john@example.com',
+  };
+
+  await db.insert(usersTable).values(user);
+  console.log('New user created!')
+
+  const users = await db.select().from(usersTable);
+  console.log('Getting all users from the database: ', users)
+
+  await db
+    .update(usersTable)
+    .set({
+      name: 'John Updated',
+    })
+    .where(eq(usersTable.email, user.email));
+  console.log('User info updated!')
+
+  await db.delete(usersTable).where(eq(usersTable.email, user.email));
+  console.log('User deleted!')
+}
+
+main();"#,
+        DatabaseProvider::Supabase => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import { eq } from 'drizzle-orm';
+import { usersTable } from './db/schema';
+
+// Disable prefetch as it is not supported for "Transaction" pool mode
+const client = postgres(process.env.DATABASE_URL!, { prepare: false });
+const db = drizzle(client);
+
+async function main() {
+  const user: typeof usersTable.$inferInsert = {
+    name: 'John Doe',
+    email: 'john@example.com',
+  };
+
+  await db.insert(usersTable).values(user);
+  console.log('New user created!')
+
+  const users = await db.select().from(usersTable);
+  console.log('Getting all users from the database: ', users)
+
+  await db
+    .update(usersTable)
+    .set({
+      name: 'John Updated',
+    })
+    .where(eq(usersTable.email, user.email));
+  console.log('User info updated!')
+
+  await db.delete(usersTable).where(eq(usersTable.email, user.email));
+  console.log('User deleted!')
+}
+
+main();"#,
     };
 
     std::fs::write(example_path, example_content)
@@ -393,7 +501,7 @@ main();"#,
 
     println!("\n{}", style(format!("✅ Drizzle ORM has been successfully set up for {}!", selected_provider.as_str())).green().bold());
     println!("\n{}", style("Next steps:").cyan().bold());
-    println!("1. Update your DATABASE_URL in .env");
+    println!("1. Update your {} in .env", selected_provider.get_env_variable_name());
     println!("2. Run 'npm run db:push' to push the schema to your database");
     println!("3. Run 'npm run db:generate' to generate migrations");
     println!("4. Run 'npm run db:studio' to open Drizzle Studio");
@@ -410,6 +518,8 @@ main();"#,
     println!("• Connection: {}", match selected_provider {
         DatabaseProvider::PostgreSQL => "node-postgres (pg)",
         DatabaseProvider::Neon => "neon-http serverless",
+        DatabaseProvider::VercelPostgres => "vercel-postgres",
+        DatabaseProvider::Supabase => "postgres-js",
     });
 
     Ok(())

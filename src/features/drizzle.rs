@@ -13,6 +13,9 @@ pub enum DatabaseProvider {
     VercelPostgres,
     Supabase,
     Xata,
+    PGLite,
+    Nile,
+    BunSQL,
 }
 
 impl DatabaseProvider {
@@ -23,6 +26,9 @@ impl DatabaseProvider {
             DatabaseProvider::VercelPostgres => "Vercel Postgres",
             DatabaseProvider::Supabase => "Supabase",
             DatabaseProvider::Xata => "Xata",
+            DatabaseProvider::PGLite => "PGLite",
+            DatabaseProvider::Nile => "Nile",
+            DatabaseProvider::BunSQL => "Bun SQL",
         }
     }
 
@@ -33,6 +39,9 @@ impl DatabaseProvider {
             DatabaseProvider::VercelPostgres => vec!["drizzle-orm", "@vercel/postgres", "dotenv"],
             DatabaseProvider::Supabase => vec!["drizzle-orm", "postgres", "dotenv"],
             DatabaseProvider::Xata => vec!["drizzle-orm", "@xata.io/client", "dotenv"],
+            DatabaseProvider::PGLite => vec!["drizzle-orm", "@electric-sql/pglite", "dotenv"],
+            DatabaseProvider::Nile => vec!["drizzle-orm", "pg", "dotenv"],
+            DatabaseProvider::BunSQL => vec!["drizzle-orm"],
         }
     }
 
@@ -43,6 +52,9 @@ impl DatabaseProvider {
             DatabaseProvider::VercelPostgres => vec!["drizzle-kit", "tsx"],
             DatabaseProvider::Supabase => vec!["drizzle-kit", "tsx"],
             DatabaseProvider::Xata => vec!["drizzle-kit", "tsx"],
+            DatabaseProvider::PGLite => vec!["drizzle-kit", "tsx"],
+            DatabaseProvider::Nile => vec!["drizzle-kit", "tsx", "@types/pg"],
+            DatabaseProvider::BunSQL => vec!["drizzle-kit", "@types/bun"],
         }
     }
 
@@ -85,6 +97,77 @@ import * as schema from './schema';
 
 const xata = getXataClient();
 export const db = drizzle(xata, { schema });"#,
+            DatabaseProvider::PGLite => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/pglite';
+import * as schema from './schema';
+
+const db = drizzle(process.env.DATABASE_URL!, { schema });"#,
+            DatabaseProvider::Nile => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import * as schema from './schema';
+
+const db = drizzle(process.env.NILEDB_URL!);"#,
+            DatabaseProvider::BunSQL => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/bun-sql';
+import * as schema from './schema';
+
+const db = drizzle(process.env.DATABASE_URL!);"#,
+        }
+    }
+
+    fn get_schema_code(&self) -> &'static str {
+        match self {
+            DatabaseProvider::Nile => r#"import { pgTable, uuid, text, timestamp, varchar, vector, boolean } from "drizzle-orm/pg-core"
+import { sql } from "drizzle-orm"
+
+export const tenantsTable = pgTable("tenants", {
+	id: uuid().default(sql`public.uuid_generate_v7()`).primaryKey().notNull(),
+	name: text(),
+	created: timestamp({ mode: 'string' }).default(sql`LOCALTIMESTAMP`).notNull(),
+	updated: timestamp({ mode: 'string' }).default(sql`LOCALTIMESTAMP`).notNull(),
+	deleted: timestamp({ mode: 'string' }),
+});
+
+export const todosTable = pgTable("todos", {
+	id: uuid().defaultRandom(),
+	tenantId: uuid("tenant_id"),
+	title: varchar({ length: 256 }),
+	estimate: varchar({ length: 256 }),
+	embedding: vector({ dimensions: 3 }),
+	complete: boolean(),
+});
+
+// Export types
+export type Tenant = typeof tenantsTable.$inferSelect;
+export type NewTenant = typeof tenantsTable.$inferInsert;
+export type Todo = typeof todosTable.$inferSelect;
+export type NewTodo = typeof todosTable.$inferInsert;"#,
+            _ => r#"import { integer, pgTable, varchar, text, timestamp } from "drizzle-orm/pg-core";
+
+// Users table
+export const usersTable = pgTable("users", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Posts table
+export const postsTable = pgTable("posts", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  authorId: integer("author_id").references(() => usersTable.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Export types
+export type User = typeof usersTable.$inferSelect;
+export type NewUser = typeof usersTable.$inferInsert;
+export type Post = typeof postsTable.$inferSelect;
+export type NewPost = typeof postsTable.$inferInsert;"#,
         }
     }
 
@@ -110,6 +193,18 @@ DATABASE_URL="postgresql://postgres:[YOUR-PASSWORD]@db.[YOUR-PROJECT-REF].supaba
 DATABASE_URL="your-xata-database-url"
 
 # Add your other environment variables here"#,
+            DatabaseProvider::PGLite => r#"# Database
+DATABASE_URL="your-pglite-database-url"
+
+# Add your other environment variables here"#,
+            DatabaseProvider::Nile => r#"# Database
+NILEDB_URL="your-nile-database-url"
+
+# Add your other environment variables here"#,
+            DatabaseProvider::BunSQL => r#"# Database
+DATABASE_URL="your-bun-sql-database-url"
+
+# Add your other environment variables here"#,
         }
     }
 
@@ -120,6 +215,9 @@ DATABASE_URL="your-xata-database-url"
             DatabaseProvider::VercelPostgres => "Vercel Postgres database (serverless)",
             DatabaseProvider::Supabase => "Supabase PostgreSQL database (open source Firebase alternative)",
             DatabaseProvider::Xata => "Xata database (serverless data platform)",
+            DatabaseProvider::PGLite => "PGLite database (ElectricSQL's PostgreSQL-compatible database)",
+            DatabaseProvider::Nile => "Nile database (PostgreSQL re-engineered for multi-tenant apps)",
+            DatabaseProvider::BunSQL => "Bun SQL database (Bun's native PostgreSQL bindings)",
         }
     }
 
@@ -130,6 +228,9 @@ DATABASE_URL="your-xata-database-url"
             DatabaseProvider::VercelPostgres => "POSTGRES_URL",
             DatabaseProvider::Supabase => "DATABASE_URL",
             DatabaseProvider::Xata => "DATABASE_URL",
+            DatabaseProvider::PGLite => "DATABASE_URL",
+            DatabaseProvider::Nile => "NILEDB_URL",
+            DatabaseProvider::BunSQL => "DATABASE_URL",
         }
     }
 }
@@ -156,7 +257,7 @@ pub async fn add_drizzle() -> Result<()> {
     );
 
     // Interactive database provider selection
-    let providers = vec![DatabaseProvider::PostgreSQL, DatabaseProvider::Neon, DatabaseProvider::VercelPostgres, DatabaseProvider::Supabase, DatabaseProvider::Xata];
+    let providers = vec![DatabaseProvider::PostgreSQL, DatabaseProvider::Neon, DatabaseProvider::VercelPostgres, DatabaseProvider::Supabase, DatabaseProvider::Xata, DatabaseProvider::PGLite, DatabaseProvider::Nile, DatabaseProvider::BunSQL];
     let provider_names: Vec<String> = providers.iter()
         .map(|p| format!("{} - {}", p.as_str(), p.get_description()))
         .collect();
@@ -202,7 +303,8 @@ pub async fn add_drizzle() -> Result<()> {
     pb.set_message("Setting up Drizzle configuration...");
 
     // Create drizzle.config.ts with provider-specific environment variable
-    let drizzle_config = format!(r#"import 'dotenv/config';
+    let drizzle_config = match selected_provider {
+        DatabaseProvider::BunSQL => format!(r#"import 'dotenv/config';
 import {{ defineConfig }} from 'drizzle-kit';
 
 export default defineConfig({{
@@ -212,7 +314,22 @@ export default defineConfig({{
   dbCredentials: {{
     url: process.env.{}!,
   }},
-}});"#, selected_provider.get_env_variable_name());
+}});
+
+// Note: Bun SQL has issues with concurrent statements in version 1.2.0
+// Avoid running multiple queries simultaneously to prevent errors"#, selected_provider.get_env_variable_name()),
+        _ => format!(r#"import 'dotenv/config';
+import {{ defineConfig }} from 'drizzle-kit';
+
+export default defineConfig({{
+  out: './drizzle',
+  schema: './src/db/schema.ts',
+  dialect: 'postgresql',
+  dbCredentials: {{
+    url: process.env.{}!,
+  }},
+}});"#, selected_provider.get_env_variable_name()),
+    };
 
     std::fs::write("drizzle.config.ts", drizzle_config)
         .context("Failed to create drizzle.config.ts")?;
@@ -223,34 +340,8 @@ export default defineConfig({{
     let db_path = project_structure.get_db_path();
     std::fs::create_dir_all(&db_path).context("Failed to create db directory")?;
 
-    // Create schema.ts (same for all providers)
-    let schema_ts = r#"import { integer, pgTable, varchar, text, timestamp } from "drizzle-orm/pg-core";
-
-// Users table
-export const usersTable = pgTable("users", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 255 }).notNull().unique(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// Posts table
-export const postsTable = pgTable("posts", {
-  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  title: text("title").notNull(),
-  content: text("content").notNull(),
-  authorId: integer("author_id").references(() => usersTable.id),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
-
-// Export types
-export type User = typeof usersTable.$inferSelect;
-export type NewUser = typeof usersTable.$inferInsert;
-export type Post = typeof postsTable.$inferSelect;
-export type NewPost = typeof postsTable.$inferInsert;"#;
-
+    // Create schema.ts with provider-specific schema
+    let schema_ts = selected_provider.get_schema_code();
     std::fs::write(format!("{}/schema.ts", db_path), schema_ts)
         .context("Failed to create schema.ts")?;
 
@@ -318,7 +409,31 @@ export type NewPost = typeof postsTable.$inferInsert;"#;
         .context("Failed to create API directory")?;
 
     let api_route_content = if project_structure.is_app_router() {
-        r#"import { NextRequest, NextResponse } from "next/server";
+        match selected_provider {
+            DatabaseProvider::Nile => r#"import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/db";
+import { tenantsTable, todosTable } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
+
+export async function GET() {
+  try {
+    const allTenants = await db.select().from(tenantsTable);
+    return NextResponse.json(allTenants);
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to fetch tenants" }, { status: 500 });
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const newTenant = await db.insert(tenantsTable).values(body).returning();
+    return NextResponse.json(newTenant[0]);
+  } catch (error) {
+    return NextResponse.json({ error: "Failed to create tenant" }, { status: 500 });
+  }
+}"#,
+            _ => r#"import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { usersTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -340,9 +455,39 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return NextResponse.json({ error: "Failed to create user" }, { status: 500 });
   }
-}"#
+}"#,
+        }
     } else {
-        r#"import type { NextApiRequest, NextApiResponse } from "next";
+        match selected_provider {
+            DatabaseProvider::Nile => r#"import type { NextApiRequest, NextApiResponse } from "next";
+import { db } from "@/db";
+import { tenantsTable, todosTable } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse
+) {
+  if (req.method === "GET") {
+    try {
+      const allTenants = await db.select().from(tenantsTable);
+      res.status(200).json(allTenants);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tenants" });
+    }
+  } else if (req.method === "POST") {
+    try {
+      const newTenant = await db.insert(tenantsTable).values(req.body).returning();
+      res.status(201).json(newTenant[0]);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create tenant" });
+    }
+  } else {
+    res.setHeader("Allow", ["GET", "POST"]);
+    res.status(405).end(`Method ${req.method} Not Allowed`);
+  }
+}"#,
+            _ => r#"import type { NextApiRequest, NextApiResponse } from "next";
 import { db } from "@/db";
 import { usersTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
@@ -369,7 +514,8 @@ export default async function handler(
     res.setHeader("Allow", ["GET", "POST"]);
     res.status(405).end(`Method ${req.method} Not Allowed`);
   }
-}"#
+}"#,
+        }
     };
 
     std::fs::write(api_path, api_route_content)
@@ -543,6 +689,119 @@ async function main() {
 }
 
 main();"#,
+        DatabaseProvider::PGLite => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/pglite';
+import { eq } from 'drizzle-orm';
+import { usersTable } from './db/schema';
+
+const db = drizzle(process.env.DATABASE_URL!);
+
+async function main() {
+  const user: typeof usersTable.$inferInsert = {
+    name: 'John Doe',
+    email: 'john@example.com',
+  };
+
+  await db.insert(usersTable).values(user);
+  console.log('New user created!')
+
+  const users = await db.select().from(usersTable);
+  console.log('Getting all users from the database: ', users)
+
+  await db
+    .update(usersTable)
+    .set({
+      name: 'John Updated',
+    })
+    .where(eq(usersTable.email, user.email));
+  console.log('User info updated!')
+
+  await db.delete(usersTable).where(eq(usersTable.email, user.email));
+  console.log('User deleted!')
+}
+
+main();"#,
+        DatabaseProvider::Nile => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { eq, sql } from 'drizzle-orm';
+import { tenantsTable, todosTable } from './db/schema';
+  
+const db = drizzle(process.env.NILEDB_URL!);
+
+async function main() {
+  const tenant: typeof tenantsTable.$inferInsert = {
+    name: 'AwesomeSauce Inc.',
+  };
+
+  await db.insert(tenantsTable).values(tenant);
+  console.log('New tenant created!')
+
+  const tenants = await db.select().from(tenantsTable);
+  console.log('Getting all tenants from the database: ', tenants)
+
+  const todo: typeof todosTable.$inferInsert = {
+    tenantId: tenants[0].id,
+    title: 'Update pitch deck with AI stuff'
+  }
+
+  await db.insert(todosTable).values(todo);
+  console.log('New todo created!')
+
+  const todos = await db.select().from(todosTable);
+  console.log('Getting all todos from the database: ', todos)
+
+  await db.execute(sql`SET nile.tenant_id = '${sql.raw(tenants[0].id)}'`);
+  console.log("Set tenant context");
+
+  // note the lack of tenant_id in the query
+  const tenant_todos = await db.select().from(todosTable);
+  console.log('Getting all todos from the tenant virtual database: ', tenant_todos)
+
+  await db
+    .update(todosTable)
+    .set({
+      complete: true,
+    })
+    .where(eq(todosTable.id, todo.id));
+  console.log('Todo marked as done!')
+
+  await db.delete(todosTable).where(eq(todosTable.id, todo.id));
+  console.log('Todo deleted!')
+}
+
+main();"#,
+        DatabaseProvider::BunSQL => r#"import 'dotenv/config';
+import { drizzle } from 'drizzle-orm/bun-sql';
+import { eq } from 'drizzle-orm';
+import { usersTable } from './db/schema';
+  
+const db = drizzle(process.env.DATABASE_URL!);
+
+async function main() {
+  const user: typeof usersTable.$inferInsert = {
+    name: 'John Doe',
+    email: 'john@example.com',
+  };
+
+  await db.insert(usersTable).values(user);
+  console.log('New user created!')
+
+  const users = await db.select().from(usersTable);
+  console.log('Getting all users from the database: ', users)
+
+  await db
+    .update(usersTable)
+    .set({
+      name: 'John Updated',
+    })
+    .where(eq(usersTable.email, user.email));
+  console.log('User info updated!')
+
+  await db.delete(usersTable).where(eq(usersTable.email, user.email));
+  console.log('User deleted!')
+}
+
+main();"#,
     };
 
     std::fs::write(example_path, example_content)
@@ -605,6 +864,9 @@ export const getXataClient = () => {
         DatabaseProvider::VercelPostgres => "vercel-postgres",
         DatabaseProvider::Supabase => "postgres-js",
         DatabaseProvider::Xata => "xata-http",
+        DatabaseProvider::PGLite => "pglite",
+        DatabaseProvider::Nile => "node-postgres",
+        DatabaseProvider::BunSQL => "bun-sql",
     });
 
     Ok(())

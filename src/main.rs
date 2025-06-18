@@ -249,27 +249,27 @@ async fn add_shadcn() -> Result<()> {
     pb.set_message("Setting up configuration files...");
 
     // Create components.json
-    let components_json = r#"{
+    let components_json = format!(r#"{{
   "$schema": "https://ui.shadcn.com/schema.json",
   "style": "new-york",
   "rsc": false,
   "tsx": true,
-  "tailwind": {
+  "tailwind": {{
     "config": "",
-    "css": "app/globals.css",
+    "css": "{}",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
-  },
-  "aliases": {
+  }},
+  "aliases": {{
     "components": "@/components",
     "utils": "@/lib/utils",
     "ui": "@/components/ui",
     "lib": "@/lib",
     "hooks": "@/hooks"
-  },
+  }},
   "iconLibrary": "lucide"
-}"#;
+}}"#, project_structure.get_globals_css_path());
 
     std::fs::write("components.json", components_json)
         .context("Failed to create components.json")?;
@@ -416,9 +416,18 @@ export function cn(...inputs: ClassValue[]) {
     std::fs::write(globals_css_path, globals_css)
         .context("Failed to update globals.css")?;
 
+    // Create components and components/ui directories
+    pb.set_message("Creating component directories...");
+    let components_path = match project_structure {
+        ProjectStructure::AppDir => "components/ui",
+        ProjectStructure::SrcDir => "src/components/ui",
+    };
+    std::fs::create_dir_all(components_path)
+        .context("Failed to create components/ui directory")?;
+
     pb.finish_with_message("shadcn/ui installed successfully!");
     println!("\n{}", style("Next steps:").green());
-    println!("1. Create a components directory: mkdir components");
+    println!("1. Components directory created: components/");
     println!("2. Add components using: npx shadcn@latest add <component-name>");
     println!("3. Import and use components in your app");
 

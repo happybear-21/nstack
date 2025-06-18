@@ -31,4 +31,15 @@ impl ProjectStructure {
             ProjectStructure::SrcDir => "src/lib",
         }
     }
+
+    pub fn get_db_path(&self) -> &'static str {
+        match self {
+            ProjectStructure::AppDir => "db",
+            ProjectStructure::SrcDir => "src/db",
+        }
+    }
+
+    pub fn is_app_router(&self) -> bool {
+        matches!(self, ProjectStructure::AppDir)
+    }
 }

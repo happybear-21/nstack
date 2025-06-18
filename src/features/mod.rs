@@ -1,10 +1,12 @@
 pub mod shadcn;
+pub mod magicui;
 
 use console::style;
 use anyhow::Result;
 
 pub fn list_features() -> Result<()> {
-    let features = vec![("shadcn", "Add shadcn/ui components and configuration")];
+    let features = vec![("shadcn", "Add shadcn/ui components and configuration"),
+    ("magicui", "Add magicui components and configuration")];
 
     println!("\n{}", style("Available Features:").cyan().bold());
     println!("{}", style("----------------").cyan());

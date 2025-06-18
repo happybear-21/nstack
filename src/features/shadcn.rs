@@ -6,14 +6,14 @@ use crate::project_structure::ProjectStructure;
 use crate::package_manager::PackageManager;
 
 pub async fn add_shadcn() -> Result<()> {
-    let package_manager = PackageManager::detect()?;
+    let package_manager = PackageManager::from_project_config()?;
     let project_structure = ProjectStructure::detect()?;
 
     println!(
         "{}",
         style(format!(
             "Using package manager: {}",
-            format!("{:?}", package_manager).to_lowercase()
+            package_manager.to_string()
         ))
         .yellow()
     );

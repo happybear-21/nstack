@@ -5,9 +5,10 @@ use dialoguer::{Select, theme::ColorfulTheme};
 use crate::features::shadcn;
 use crate::features::magicui;
 use crate::features::drizzle;
+use crate::features::prisma;
 
 pub async fn add_feature(feature: Option<String>) -> Result<()> {
-    let features = vec!["shadcn", "magicui", "drizzle"];
+    let features = vec!["shadcn", "magicui", "drizzle", "prisma"];
     let selected_feature = match feature {
         Some(f) => f,
         None => {
@@ -24,6 +25,7 @@ pub async fn add_feature(feature: Option<String>) -> Result<()> {
         "shadcn" => shadcn::add_shadcn().await?,
         "magicui" => magicui::add_magicui().await?,
         "drizzle" => drizzle::add_drizzle().await?,
+        "prisma" => prisma::add_prisma().await?,
         _ => {
             println!("Unknown feature: {}", selected_feature);
         }
